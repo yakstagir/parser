@@ -1,0 +1,76 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+use Yaks\LogFormatFactory;
+use Yaks\LogParser;
+use Yaks\Report;
+use Yaks\ReportIndicators\CrawlersIndicator;
+use Yaks\ReportIndicators\StatusCodesIndicator;
+use Yaks\ReportIndicators\TrafficIndicator;
+use Yaks\ReportIndicators\UniqueUrlsIndicator;
+use Yaks\ReportIndicators\ViewsIndicator;
+
+require __DIR__ . '/../vendor/autoload.php';
+ini_set("auto_detect_line_endings", 'true');
+
+$optind  = null;
+$options = getopt(
+    'f:h',
+    [
+        'format:',
+        'help',
+    ],
+    $optind
+);
+
+$logFormatNameDefault = 'combined';
+
+if (isset($options['help']) || isset($options['h'])) {
+    $help = "
+usage: parse [--help] [-f|--format=combined] path_to_file
+
+Options:
+        -h  --help      Show this message
+        -f  --format    Log format (default: {$logFormatNameDefault})
+Example:
+        parse --format=combined access_log.txt
+";
+
+    die($help);
+}
+
+$logFormatName = $logFormatNameDefault;
+if (isset($options['format']) || isset($options['f'])) {
+    $logFormatName = isset($options['format']) ? $options['format'] : $options['f'];
+    if (empty($logFormatName)) {
+        die("Формат лога обязателен для заполнения\n");
+    }
+}
+
+$afterOptions = array_slice($argv, $optind);
+if (empty($afterOptions)) {
+    die("Не задан путь к файлу\n");
+}
+
+$filePath = current($afterOptions);
+if (!file_exists($filePath)) {
+    die("Файл {$filePath} не существует\n");
+}
+
+$report = new Report([
+    'views'       => new ViewsIndicator(),
+    'urls'        => new UniqueUrlsIndicator(),
+    'traffic'     => new TrafficIndicator(),
+    'crawlers'    => new CrawlersIndicator(),
+    'statusCodes' => new StatusCodesIndicator(),
+]);
+$parser = new LogParser($filePath, LogFormatFactory::make($logFormatName));
+
+foreach ($parser->getFormattedLogLine() as $logLine) {
+    $report->accumulate($logLine);
+}
+
+echo $report->toJson(), "\n";
+
+
